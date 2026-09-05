@@ -1,9 +1,10 @@
-name: Build APK
+name: Build Android APK
 
 on:
   push:
     branches:
       - main
+
   workflow_dispatch:
 
 permissions:
@@ -16,12 +17,12 @@ jobs:
 
     steps:
 
-      # Step 1: Checkout source code
+      # Checkout repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
 
-      # Step 2: Setup Java
+      # Setup Java
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -29,42 +30,36 @@ jobs:
           java-version: "17"
 
 
-      # Step 3: Setup Flutter
+      # Setup Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: stable
           channel: stable
           cache: true
 
 
-      # Step 4: Check Flutter installation
+      # Check Flutter
       - name: Flutter Doctor
         run: flutter doctor -v
 
 
-      # Step 5: Get Flutter dependencies
+      # Get dependencies
       - name: Get Dependencies
         run: flutter pub get
 
 
-      # Step 6: Analyze project
-      - name: Analyze Project
-        run: flutter analyze
-
-
-      # Step 7: Build Debug APK
+      # Build APK
       - name: Build Debug APK
         run: flutter build apk --debug
 
 
-      # Step 8: Check APK exists
+      # Verify APK
       - name: Verify APK
         run: |
           APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
 
           if [ ! -f "$APK_PATH" ]; then
-            echo "Error: APK file not found at $APK_PATH"
+            echo "APK not found!"
             exit 1
           fi
 
@@ -72,7 +67,7 @@ jobs:
           ls -lh "$APK_PATH"
 
 
-      # Step 9: Upload APK as GitHub Actions Artifact
+      # Upload APK artifact
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -81,49 +76,24 @@ jobs:
           retention-days: 30
 
 
-      # Step 10: Prepare Release Information
-      - name: Prepare Release Information
-        id: release_info
-        run: |
-          RELEASE_TAG="debug-apk-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-
-          RELEASE_TITLE="Debug APK Build #${GITHUB_RUN_NUMBER}"
-
-          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
-
-          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "release_title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
-          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
-
-
-      # Step 11: Create GitHub Release
+      # Create GitHub Release
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.release_info.outputs.release_tag }}
-          RELEASE_TITLE: ${{ steps.release_info.outputs.release_title }}
-          ASSET_PATH: ${{ steps.release_info.outputs.apk_path }}
-
-          NOTES: |
-            ### Automated Debug APK Build
-
-            **Notice:** This is an automatically generated debug APK.
-
-            - **Build:** The APK was built by GitHub Actions.
-            - **Run Number:** ${{ github.run_number }}
-            - **Run Attempt:** ${{ github.run_attempt }}
-            - **Source Commit SHA:** ${{ github.sha }}
-            - **Intended Purpose:** The APK is intended for testing.
-            - **Production Status:** The APK is not a Play Store production release.
-            - **Signing:** The APK is signed only with a temporary debug keystore.
 
         run: |
-          echo "Creating GitHub Release..."
+          RELEASE_TAG="debug-apk-build-${GITHUB_RUN_NUMBER}"
+          RELEASE_TITLE="Debug APK Build #${GITHUB_RUN_NUMBER}"
+          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
 
-          gh release create "$RELEASE_TAG" "$ASSET_PATH" \
-            --target "$GITHUB_SHA" \
+          gh release create "$RELEASE_TAG" "$APK_PATH" \
             --title "$RELEASE_TITLE" \
-            --notes "$NOTES" \
-            --latest
+            --notes "Automated Debug APK Build
 
-          echo "Release created successfully!"
+          Build generated automatically using GitHub Actions.
+
+          Run Number: ${GITHUB_RUN_NUMBER}
+          Commit: ${GITHUB_SHA}
+
+          This APK is intended for testing purposes." \
+            --latest
