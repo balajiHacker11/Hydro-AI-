@@ -17,12 +17,30 @@ jobs:
 
     steps:
 
-      # Checkout repository
+      # -----------------------------------
+      # 1. Checkout Repository
+      # -----------------------------------
       - name: Checkout Repository
         uses: actions/checkout@v4
 
 
-      # Setup Java
+      # -----------------------------------
+      # 2. Show Repository Files
+      # -----------------------------------
+      - name: Check Project Structure
+        run: |
+          echo "Repository structure:"
+          find . -maxdepth 3 -type f | sort
+
+          echo ""
+          echo "Searching for pubspec.yaml..."
+
+          find . -name "pubspec.yaml"
+
+
+      # -----------------------------------
+      # 3. Setup Java
+      # -----------------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -30,7 +48,9 @@ jobs:
           java-version: "17"
 
 
-      # Setup Flutter
+      # -----------------------------------
+      # 4. Setup Flutter
+      # -----------------------------------
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -38,62 +58,101 @@ jobs:
           cache: true
 
 
-      # Check Flutter
+      # -----------------------------------
+      # 5. Flutter Doctor
+      # -----------------------------------
       - name: Flutter Doctor
         run: flutter doctor -v
 
 
-      # Get dependencies
-      - name: Get Dependencies
-        run: flutter pub get
-
-
-      # Build APK
-      - name: Build Debug APK
-        run: flutter build apk --debug
-
-
-      # Verify APK
-      - name: Verify APK
+      # -----------------------------------
+      # 6. Find Flutter Project
+      # -----------------------------------
+      - name: Find Flutter Project
+        id: flutter_project
         run: |
-          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          PUBSPEC=$(find . -name "pubspec.yaml" -not -path "*/.pub-cache/*" | head -n 1)
 
-          if [ ! -f "$APK_PATH" ]; then
-            echo "APK not found!"
+          if [ -z "$PUBSPEC" ]; then
+            echo "ERROR: pubspec.yaml not found."
+            echo "This repository may not be a Flutter project."
             exit 1
           fi
 
-          echo "APK successfully generated!"
-          ls -lh "$APK_PATH"
+          PROJECT_DIR=$(dirname "$PUBSPEC")
+
+          echo "Flutter project found at: $PROJECT_DIR"
+
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
 
-      # Upload APK artifact
+      # -----------------------------------
+      # 7. Get Dependencies
+      # -----------------------------------
+      - name: Get Dependencies
+        working-directory: ${{ steps.flutter_project.outputs.project_dir }}
+        run: flutter pub get
+
+
+      # -----------------------------------
+      # 8. Build Debug APK
+      # -----------------------------------
+      - name: Build Debug APK
+        working-directory: ${{ steps.flutter_project.outputs.project_dir }}
+        run: flutter build apk --debug
+
+
+      # -----------------------------------
+      # 9. Find Generated APK
+      # -----------------------------------
+      - name: Find APK
+        id: apk
+        run: |
+          APK_PATH=$(find . -path "*/build/app/outputs/flutter-apk/app-debug.apk" | head -n 1)
+
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
+
+          echo "APK found at: $APK_PATH"
+
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+
+      # -----------------------------------
+      # 10. Verify APK
+      # -----------------------------------
+      - name: Verify APK
+        run: |
+          ls -lh "${{ steps.apk.outputs.apk_path }}"
+
+
+      # -----------------------------------
+      # 11. Upload APK
+      # -----------------------------------
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: Android-Debug-APK
+          path: ${{ steps.apk.outputs.apk_path }}
           retention-days: 30
 
 
-      # Create GitHub Release
+      # -----------------------------------
+      # 12. Create GitHub Release
+      # -----------------------------------
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
         run: |
           RELEASE_TAG="debug-apk-build-${GITHUB_RUN_NUMBER}"
+
           RELEASE_TITLE="Debug APK Build #${GITHUB_RUN_NUMBER}"
-          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
 
-          gh release create "$RELEASE_TAG" "$APK_PATH" \
+          gh release create "$RELEASE_TAG" \
+            "${{ steps.apk.outputs.apk_path }}" \
             --title "$RELEASE_TITLE" \
-            --notes "Automated Debug APK Build
-
-          Build generated automatically using GitHub Actions.
-
-          Run Number: ${GITHUB_RUN_NUMBER}
-          Commit: ${GITHUB_SHA}
-
-          This APK is intended for testing purposes." \
+            --notes "Automated Debug APK Build - Generated using GitHub Actions. Build Number: ${GITHUB_RUN_NUMBER}" \
             --latest
