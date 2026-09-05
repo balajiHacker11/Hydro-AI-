@@ -1,217 +1,61 @@
-name: Build Android APK
+name: Build APK
+
 
 on:
+
   push:
+
     branches:
+
       - main
 
-  workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
-  build-apk:
-    name: Build Android APK
+
+  build:
+
     runs-on: ubuntu-latest
+
 
     steps:
 
-      # -------------------------------
-      # Checkout Repository
-      # -------------------------------
-      - name: Checkout Repository
+      - name: Checkout source
+
         uses: actions/checkout@v4
 
 
-      # -------------------------------
-      # Setup Node.js
-      # -------------------------------
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
+      - name: Set up JDK 17
 
-
-      # -------------------------------
-      # Setup Java
-      # -------------------------------
-      - name: Setup Java
         uses: actions/setup-java@v4
+
         with:
-          distribution: 'temurin'
-          java-version: '17'
+
+          distribution: temurin
+
+          java-version: 17
 
 
-      # -------------------------------
-      # Show Project Structure
-      # -------------------------------
-      - name: Check Project Files
-        run: |
-          echo "Project files:"
-          ls -la
+      - name: Setup Android SDK
 
-          echo ""
-          echo "Checking package.json..."
-
-          if [ ! -f "package.json" ]; then
-            echo "ERROR: package.json not found!"
-            exit 1
-          fi
+        uses: android-actions/setup-android@v3
 
 
-      # -------------------------------
-      # Install Dependencies
-      # -------------------------------
-      - name: Install Dependencies
-        run: npm install
+      - name: Setup Gradle
+
+        uses: gradle/actions/setup-gradle@v4
 
 
-      # -------------------------------
-      # Build Web Application
-      # -------------------------------
-      - name: Build Web App
-        run: npm run build
-
-
-      # -------------------------------
-      # Check Build Output
-      # -------------------------------
-      - name: Verify Web Build
-        run: |
-          if [ ! -d "dist" ]; then
-            echo "ERROR: dist folder not found!"
-            exit 1
-          fi
-
-          echo "Web build successful!"
-          ls -la dist
-
-
-      # -------------------------------
-      # Install Capacitor
-      # -------------------------------
-      - name: Setup Capacitor
-        run: |
-          npm install @capacitor/core @capacitor/android
-          npm install -D @capacitor/cli
-
-
-      # -------------------------------
-      # Create Capacitor Config if needed
-      # -------------------------------
-      - name: Configure Capacitor
-        run: |
-          if [ ! -f "capacitor.config.ts" ]; then
-
-            echo "Creating Capacitor configuration..."
-
-            cat <<EOF > capacitor.config.ts
-          import type { CapacitorConfig } from '@capacitor/cli';
-
-          const config: CapacitorConfig = {
-            appId: 'com.generated.app',
-            appName: 'Generated App',
-            webDir: 'dist'
-          };
-
-          export default config;
-          EOF
-
-          fi
-
-
-      # -------------------------------
-      # Add Android Platform
-      # -------------------------------
-      - name: Add Android Platform
-        run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          fi
-
-
-      # -------------------------------
-      # Sync Web App to Android
-      # -------------------------------
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-
-      # -------------------------------
-      # Make Gradle Executable
-      # -------------------------------
-      - name: Make Gradle Executable
-        run: chmod +x android/gradlew
-
-
-      # -------------------------------
-      # Build Debug APK
-      # -------------------------------
       - name: Build Debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug
+
+        run: gradle assembleDebug --stacktrace
 
 
-      # -------------------------------
-      # Find APK
-      # -------------------------------
-      - name: Find Generated APK
-        id: apk
-        run: |
-          APK_PATH=$(find android -name "*.apk" -type f | head -n 1)
-
-          if [ -z "$APK_PATH" ]; then
-            echo "ERROR: APK not found!"
-            exit 1
-          fi
-
-          echo "APK found:"
-          echo "$APK_PATH"
-
-          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
-
-
-      # -------------------------------
-      # Verify APK
-      # -------------------------------
-      - name: Verify APK
-        run: |
-          ls -lh "${{ steps.apk.outputs.apk_path }}"
-
-
-      # -------------------------------
-      # Upload APK Artifact
-      # -------------------------------
       - name: Upload APK
+
         uses: actions/upload-artifact@v4
+
         with:
-          name: Android-APK
-          path: ${{ steps.apk.outputs.apk_path }}
-          retention-days: 30
 
+          name: app-debug-apk
 
-      # -------------------------------
-      # Create GitHub Release
-      # -------------------------------
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-        run: |
-          RELEASE_TAG="apk-build-${GITHUB_RUN_NUMBER}"
-
-          RELEASE_TITLE="Android APK Build #${GITHUB_RUN_NUMBER}"
-
-          gh release create "$RELEASE_TAG" \
-            "${{ steps.apk.outputs.apk_path }}" \
-            --title "$RELEASE_TITLE" \
-            --notes "Automated Android APK build generated by GitHub Actions.
-
-          Build Number: ${GITHUB_RUN_NUMBER}
-
-          Commit: ${GITHUB_SHA}
-
-          This APK was generated from the web application using Capacitor." \
-            --latest
+          path: app/build/outputs/apk/debug/app-debug.apk
