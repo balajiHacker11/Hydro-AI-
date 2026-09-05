@@ -11,148 +11,207 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-apk:
     name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
 
-      # -----------------------------------
-      # 1. Checkout Repository
-      # -----------------------------------
+      # -------------------------------
+      # Checkout Repository
+      # -------------------------------
       - name: Checkout Repository
         uses: actions/checkout@v4
 
 
-      # -----------------------------------
-      # 2. Show Repository Files
-      # -----------------------------------
-      - name: Check Project Structure
-        run: |
-          echo "Repository structure:"
-          find . -maxdepth 3 -type f | sort
-
-          echo ""
-          echo "Searching for pubspec.yaml..."
-
-          find . -name "pubspec.yaml"
+      # -------------------------------
+      # Setup Node.js
+      # -------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
 
-      # -----------------------------------
-      # 3. Setup Java
-      # -----------------------------------
+      # -------------------------------
+      # Setup Java
+      # -------------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: "17"
+          distribution: 'temurin'
+          java-version: '17'
 
 
-      # -----------------------------------
-      # 4. Setup Flutter
-      # -----------------------------------
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-
-      # -----------------------------------
-      # 5. Flutter Doctor
-      # -----------------------------------
-      - name: Flutter Doctor
-        run: flutter doctor -v
-
-
-      # -----------------------------------
-      # 6. Find Flutter Project
-      # -----------------------------------
-      - name: Find Flutter Project
-        id: flutter_project
+      # -------------------------------
+      # Show Project Structure
+      # -------------------------------
+      - name: Check Project Files
         run: |
-          PUBSPEC=$(find . -name "pubspec.yaml" -not -path "*/.pub-cache/*" | head -n 1)
+          echo "Project files:"
+          ls -la
 
-          if [ -z "$PUBSPEC" ]; then
-            echo "ERROR: pubspec.yaml not found."
-            echo "This repository may not be a Flutter project."
+          echo ""
+          echo "Checking package.json..."
+
+          if [ ! -f "package.json" ]; then
+            echo "ERROR: package.json not found!"
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PUBSPEC")
 
-          echo "Flutter project found at: $PROJECT_DIR"
-
-          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-
-
-      # -----------------------------------
-      # 7. Get Dependencies
-      # -----------------------------------
-      - name: Get Dependencies
-        working-directory: ${{ steps.flutter_project.outputs.project_dir }}
-        run: flutter pub get
+      # -------------------------------
+      # Install Dependencies
+      # -------------------------------
+      - name: Install Dependencies
+        run: npm install
 
 
-      # -----------------------------------
-      # 8. Build Debug APK
-      # -----------------------------------
+      # -------------------------------
+      # Build Web Application
+      # -------------------------------
+      - name: Build Web App
+        run: npm run build
+
+
+      # -------------------------------
+      # Check Build Output
+      # -------------------------------
+      - name: Verify Web Build
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "ERROR: dist folder not found!"
+            exit 1
+          fi
+
+          echo "Web build successful!"
+          ls -la dist
+
+
+      # -------------------------------
+      # Install Capacitor
+      # -------------------------------
+      - name: Setup Capacitor
+        run: |
+          npm install @capacitor/core @capacitor/android
+          npm install -D @capacitor/cli
+
+
+      # -------------------------------
+      # Create Capacitor Config if needed
+      # -------------------------------
+      - name: Configure Capacitor
+        run: |
+          if [ ! -f "capacitor.config.ts" ]; then
+
+            echo "Creating Capacitor configuration..."
+
+            cat <<EOF > capacitor.config.ts
+          import type { CapacitorConfig } from '@capacitor/cli';
+
+          const config: CapacitorConfig = {
+            appId: 'com.generated.app',
+            appName: 'Generated App',
+            webDir: 'dist'
+          };
+
+          export default config;
+          EOF
+
+          fi
+
+
+      # -------------------------------
+      # Add Android Platform
+      # -------------------------------
+      - name: Add Android Platform
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+
+
+      # -------------------------------
+      # Sync Web App to Android
+      # -------------------------------
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+
+      # -------------------------------
+      # Make Gradle Executable
+      # -------------------------------
+      - name: Make Gradle Executable
+        run: chmod +x android/gradlew
+
+
+      # -------------------------------
+      # Build Debug APK
+      # -------------------------------
       - name: Build Debug APK
-        working-directory: ${{ steps.flutter_project.outputs.project_dir }}
-        run: flutter build apk --debug
+        working-directory: android
+        run: ./gradlew assembleDebug
 
 
-      # -----------------------------------
-      # 9. Find Generated APK
-      # -----------------------------------
-      - name: Find APK
+      # -------------------------------
+      # Find APK
+      # -------------------------------
+      - name: Find Generated APK
         id: apk
         run: |
-          APK_PATH=$(find . -path "*/build/app/outputs/flutter-apk/app-debug.apk" | head -n 1)
+          APK_PATH=$(find android -name "*.apk" -type f | head -n 1)
 
           if [ -z "$APK_PATH" ]; then
-            echo "ERROR: APK was not generated."
+            echo "ERROR: APK not found!"
             exit 1
           fi
 
-          echo "APK found at: $APK_PATH"
+          echo "APK found:"
+          echo "$APK_PATH"
 
           echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
 
-      # -----------------------------------
-      # 10. Verify APK
-      # -----------------------------------
+      # -------------------------------
+      # Verify APK
+      # -------------------------------
       - name: Verify APK
         run: |
           ls -lh "${{ steps.apk.outputs.apk_path }}"
 
 
-      # -----------------------------------
-      # 11. Upload APK
-      # -----------------------------------
-      - name: Upload APK Artifact
+      # -------------------------------
+      # Upload APK Artifact
+      # -------------------------------
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Android-Debug-APK
+          name: Android-APK
           path: ${{ steps.apk.outputs.apk_path }}
           retention-days: 30
 
 
-      # -----------------------------------
-      # 12. Create GitHub Release
-      # -----------------------------------
+      # -------------------------------
+      # Create GitHub Release
+      # -------------------------------
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
         run: |
-          RELEASE_TAG="debug-apk-build-${GITHUB_RUN_NUMBER}"
+          RELEASE_TAG="apk-build-${GITHUB_RUN_NUMBER}"
 
-          RELEASE_TITLE="Debug APK Build #${GITHUB_RUN_NUMBER}"
+          RELEASE_TITLE="Android APK Build #${GITHUB_RUN_NUMBER}"
 
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.apk_path }}" \
             --title "$RELEASE_TITLE" \
-            --notes "Automated Debug APK Build - Generated using GitHub Actions. Build Number: ${GITHUB_RUN_NUMBER}" \
+            --notes "Automated Android APK build generated by GitHub Actions.
+
+          Build Number: ${GITHUB_RUN_NUMBER}
+
+          Commit: ${GITHUB_SHA}
+
+          This APK was generated from the web application using Capacitor." \
             --latest
