@@ -1,0 +1,7 @@
+{
+  "name": "Hydro AI",
+  "description": "Intelligent water classification, treatment recommendation, agricultural soil matching, and AI water assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
