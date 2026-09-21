@@ -1,6 +1,6 @@
 {
   "name": "Hydro AI",
-  "description": "Intelligent water classification, treatment recommendation, agricultural soil matching, and AI water assistant.",
+  "description": "Automated anomaly detection, quality control, and telemetry sanitization for public groundwater sensor networks.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
