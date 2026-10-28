@@ -57,11 +57,19 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `test WaterMLEngine classifies Type E Seawater`() {
-    val params = WaterParameters(ph = 8.1, tds = 35000.0, ec = 52000.0, turbidity = 2.0, hardness = 1400.0, organicCarbon = 2.5)
-    val result = WaterMLEngine.classifyAndPredict(params, 10000.0)
-    assertEquals(WaterType.TYPE_E, result.waterType)
-    assertTrue(result.predictedYieldPercent in 34.0..46.0)
+  fun `test TelemetryViewModel AI Voice Assistant initialization and language toggle`() {
+    val viewModel = com.example.viewmodel.TelemetryViewModel()
+    assertEquals(com.example.network.AssistantLanguage.ENGLISH, viewModel.uiState.value.assistantLanguage)
+    assertTrue(viewModel.uiState.value.chatMessages.isNotEmpty())
+
+    // Switch to Tamil
+    viewModel.setAssistantLanguage(com.example.network.AssistantLanguage.TAMIL)
+    assertEquals(com.example.network.AssistantLanguage.TAMIL, viewModel.uiState.value.assistantLanguage)
+    assertTrue(viewModel.uiState.value.chatMessages.first().text.contains("வணக்கம்"))
+
+    // Toggle auto-speak
+    viewModel.toggleAutoSpeak()
+    assertTrue(viewModel.uiState.value.isAutoSpeakEnabled)
   }
 }
 

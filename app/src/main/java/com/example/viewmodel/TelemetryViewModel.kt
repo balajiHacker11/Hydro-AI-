@@ -5,13 +5,18 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.StationTelemetryRepository
 import com.example.ml.TelemetryAutoencoderEngine
 import com.example.model.AnomalyType
+import com.example.model.ChatMessage
 import com.example.model.MaintenanceTicket
 import com.example.model.NetworkHealthSummary
 import com.example.model.StationHealth
 import com.example.model.TelemetryReading
 import com.example.model.TicketPriority
 import com.example.model.TicketStatus
+import com.example.model.WaterParameters
 import com.example.model.WaterStation
+import com.example.model.WaterType
+import com.example.network.AssistantLanguage
+import com.example.network.GeminiClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class TelemetryUiState(
-    val currentTab: Int = 0, // 0: Stations Network, 1: Anomaly Inspector, 2: Sanitizer & QC, 3: Triage Tickets
+    val currentTab: Int = 0, // 0: Stations, 1: Anomaly AI, 2: Sanitizer, 3: Triage, 4: AI Voice Assistant
     val stations: List<WaterStation> = emptyList(),
     val selectedStationId: String = "st-01",
     val searchQuery: String = "",
@@ -30,7 +35,19 @@ data class TelemetryUiState(
     val anomalySensitivity: Float = 1.0f, // Sensitivity multiplier (0.5 to 2.0)
     val showCleanedOverlay: Boolean = true,
     val notificationMessage: String? = null,
-    val isAutoSanitizeActive: Boolean = true
+    val isAutoSanitizeActive: Boolean = true,
+    // AI Voice Assistant State
+    val assistantLanguage: AssistantLanguage = AssistantLanguage.ENGLISH,
+    val isAssistantThinking: Boolean = false,
+    val isAutoSpeakEnabled: Boolean = false,
+    val currentlySpeakingMessageId: String? = null,
+    val isVoiceListening: Boolean = false,
+    val chatMessages: List<ChatMessage> = listOf(
+        ChatMessage(
+            isUser = false,
+            text = "👋 Hello! I am Hydro AI, your Water Telemetry & Voice Assistant. I can analyze DWLR piezometers, troubleshoot sensor anomalies, assess drinking potability, and evaluate land across all 4 seasons in English & தமிழ்."
+        )
+    )
 ) {
     val selectedStation: WaterStation?
         get() = stations.firstOrNull { it.id == selectedStationId } ?: stations.firstOrNull()
@@ -120,9 +137,150 @@ class TelemetryViewModel : ViewModel() {
         _uiState.update { it.copy(notificationMessage = null) }
     }
 
+    fun showNotification(msg: String) {
+        _uiState.update { it.copy(notificationMessage = msg) }
+    }
+
+    // ==========================================
+    // AI Assistant, Voice & Language Operations
+    // ==========================================
+
+    fun setAssistantLanguage(lang: AssistantLanguage) {
+        if (_uiState.value.assistantLanguage == lang) return
+        
+        val greeting = if (lang == AssistantLanguage.TAMIL) {
+            "வணக்கம்! நான் ஹைட்ரோ AI (Hydro AI), உங்கள் நிலத்தடி நீர் மற்றும் குரல் வழி உதவியாளர். தமிழ் மற்றும் ஆங்கிலத்தில் நிலத்தடி நீர் நிலை, சென்சார் பிழைகள், குடிநீர் தரம், மற்றும் 4 பருவ கால விவசாய ஆலோசனைகளை கேட்கலாம்."
+        } else {
+            "👋 Hello! I am Hydro AI, your Water Telemetry & Voice Assistant. I can analyze DWLR piezometers, troubleshoot sensor anomalies, assess drinking potability, and evaluate land across all 4 seasons in English & தமிழ்."
+        }
+
+        _uiState.update {
+            it.copy(
+                assistantLanguage = lang,
+                chatMessages = listOf(
+                    ChatMessage(
+                        isUser = false,
+                        text = greeting
+                    )
+                ),
+                notificationMessage = if (lang == AssistantLanguage.TAMIL) "மொழி தமிழுக்கு மாற்றப்பட்டது 🇮🇳" else "Language changed to English 🇬🇧"
+            )
+        }
+    }
+
+    fun toggleAutoSpeak() {
+        val current = _uiState.value.isAutoSpeakEnabled
+        _uiState.update {
+            it.copy(
+                isAutoSpeakEnabled = !current,
+                notificationMessage = if (!current) "🔊 Auto Voice Output Enabled" else "🔇 Auto Voice Output Muted"
+            )
+        }
+    }
+
+    fun setSpeakingMessageId(id: String?) {
+        _uiState.update { it.copy(currentlySpeakingMessageId = id) }
+    }
+
+    fun setVoiceListening(isListening: Boolean) {
+        _uiState.update { it.copy(isVoiceListening = isListening) }
+    }
+
+    fun clearChat() {
+        val greeting = if (_uiState.value.assistantLanguage == AssistantLanguage.TAMIL) {
+            "வணக்கம்! புதிய உரையாடலைத் தொடங்கலாம். உங்கள் கேள்வியைக் கேட்கவும்."
+        } else {
+            "Hello! Chat history cleared. How can I assist you with your water data today?"
+        }
+        _uiState.update {
+            it.copy(
+                chatMessages = listOf(ChatMessage(isUser = false, text = greeting)),
+                currentlySpeakingMessageId = null
+            )
+        }
+    }
+
+    fun sendChatMessage(text: String, onResponseReadyToSpeak: ((ChatMessage) -> Unit)? = null) {
+        if (text.isBlank()) return
+
+        val userMessage = ChatMessage(isUser = true, text = text.trim())
+        _uiState.update {
+            it.copy(
+                chatMessages = it.chatMessages + userMessage,
+                isAssistantThinking = true
+            )
+        }
+
+        viewModelScope.launch {
+            val state = _uiState.value
+            val currentStation = state.selectedStation
+            val currentParams = WaterParameters(
+                ph = 7.2,
+                tds = 340.0,
+                ec = 510.0,
+                turbidity = 1.3,
+                hardness = 145.0
+            )
+
+            val replyText = GeminiClient.askWaterAssistant(
+                userQuery = text,
+                language = state.assistantLanguage,
+                currentStation = currentStation,
+                currentTelemetry = currentParams,
+                activeClassification = WaterType.TYPE_A
+            )
+
+            val botMessage = ChatMessage(
+                isUser = false,
+                text = replyText,
+                relatedType = WaterType.TYPE_A
+            )
+
+            _uiState.update {
+                it.copy(
+                    chatMessages = it.chatMessages + botMessage,
+                    isAssistantThinking = false
+                )
+            }
+
+            if (state.isAutoSpeakEnabled) {
+                onResponseReadyToSpeak?.invoke(botMessage)
+            }
+        }
+    }
+
     /**
-     * Re-runs the Autoencoder Engine across all stations with updated sensitivity threshold.
+     * Ask AI about current station directly from other screens.
      */
+    fun askAboutStation(station: WaterStation) {
+        selectStation(station.id)
+        setTab(4) // Switch to AI Assistant tab
+        val prompt = if (_uiState.value.assistantLanguage == AssistantLanguage.TAMIL) {
+            "${station.name} (${station.code}) நிலையத்தின் தற்போதைய நிலத்தடி நீர் நிலை மற்றும் சென்சார் ஆரோக்கியத்தை பகுப்பாய்வு செய்து விளக்குங்கள்."
+        } else {
+            "Analyze current groundwater level (${station.currentWaterLevel} m bgl) and telemetry health for ${station.name} (${station.code})."
+        }
+        sendChatMessage(prompt)
+    }
+
+    /**
+     * Ask AI about specific sensor anomaly.
+     */
+    fun askAboutAnomaly(station: WaterStation, anomaly: AnomalyType) {
+        selectStation(station.id)
+        setTab(4)
+        val prompt = if (_uiState.value.assistantLanguage == AssistantLanguage.TAMIL) {
+            "${station.name} நிலையத்தில் கண்டறியப்பட்ட '${anomaly.title}' (${anomaly.code}) பிழைக்கான காரணங்கள் மற்றும் களத்தில் சரிசெய்யும் வழிகளை விளக்குங்கள்."
+        } else {
+            "Diagnose anomaly '${anomaly.title}' (${anomaly.code}) at ${station.name} and provide field troubleshooting recommendations."
+        }
+        sendChatMessage(prompt)
+    }
+
+    // ==========================================
+    // Telemetry Engine & Maintenance Tickets
+    // ==========================================
+
     private fun recalculateWithSensitivity(sensitivity: Float) {
         val updated = _uiState.value.stations.map { station ->
             val processed = TelemetryAutoencoderEngine.processAndSanitize(
@@ -137,9 +295,6 @@ class TelemetryViewModel : ViewModel() {
         _uiState.update { it.copy(stations = updated) }
     }
 
-    /**
-     * Dispatches a new field maintenance ticket for the selected station.
-     */
     fun createTicketForStation(station: WaterStation, anomaly: AnomalyType) {
         val newTicket = MaintenanceTicket(
             stationId = station.id,
@@ -175,9 +330,6 @@ class TelemetryViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Periodic live data ping simulation simulating real-time telemetry updates.
-     */
     private fun startLiveStreamingSimulation() {
         viewModelScope.launch {
             while (true) {
@@ -185,7 +337,6 @@ class TelemetryViewModel : ViewModel() {
                 if (_uiState.value.isLiveStreaming) {
                     val currentStations = _uiState.value.stations
                     if (currentStations.isNotEmpty()) {
-                        // slightly jitter live reading for active station to show live dynamics
                         val updated = currentStations.map { station ->
                             val readings = station.readings.toMutableList()
                             if (readings.isNotEmpty()) {

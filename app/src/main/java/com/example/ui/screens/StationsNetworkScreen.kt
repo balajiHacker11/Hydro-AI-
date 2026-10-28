@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.CheckCircle
@@ -193,6 +194,65 @@ fun StationsNetworkScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            // Voice AI Assistant Banner
+            Card(
+                onClick = { viewModel.setTab(4) },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("stations_ai_banner")
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (uiState.assistantLanguage == com.example.network.AssistantLanguage.TAMIL) "ஹைட்ரோ AI குரல் உதவியாளர்" else "Hydro AI Voice Assistant",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (uiState.assistantLanguage == com.example.network.AssistantLanguage.TAMIL) "குரல் அல்லது தமிழ்/ஆங்கிலத்தில் உடனடி ஆலோசனை பெறுக" else "Speak or chat about water levels, anomalies & 4 seasons",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    ) {
+                        Text(
+                            text = if (uiState.assistantLanguage == com.example.network.AssistantLanguage.TAMIL) "திற ➔" else "Open ➔",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             // Search Bar
             OutlinedTextField(
                 value = uiState.searchQuery,
@@ -240,6 +300,9 @@ fun StationsNetworkScreen(
                 onSelect = {
                     viewModel.selectStation(station.id)
                     viewModel.setTab(1) // Jump to Anomaly Inspector
+                },
+                onAskAi = {
+                    viewModel.askAboutStation(station)
                 }
             )
         }
@@ -293,7 +356,8 @@ fun FilterPill(
 fun StationCardItem(
     station: WaterStation,
     isSelected: Boolean,
-    onSelect: () -> Unit
+    onSelect: () -> Unit,
+    onAskAi: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -431,22 +495,43 @@ fun StationCardItem(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Footer info
+            // Footer info & Ask AI button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Aquifer: ${station.aquiferType}",
+                    text = "Aquifer: ${station.aquiferType} • Ping: ${station.lastPingTime}",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = "Ping: ${station.lastPingTime}",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.outline
-                )
+
+                Surface(
+                    onClick = onAskAi,
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Ask AI",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Ask AI",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
         }
     }

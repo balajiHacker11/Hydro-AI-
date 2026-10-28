@@ -32,6 +32,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -264,22 +265,45 @@ fun AnomalyInspectorScreen(
                         )
                     }
 
-                    if (primaryAnomaly != AnomalyType.NONE && !primaryAnomaly.isTrueHydrologicEvent) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        // Dispatch Maintenance Ticket Button
-                        Button(
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
                             onClick = {
-                                viewModel.createTicketForStation(station, primaryAnomaly)
+                                viewModel.askAboutAnomaly(station, primaryAnomaly)
                             },
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("dispatch_ticket_btn"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(primaryAnomaly.colorHex)),
+                                .weight(1f)
+                                .testTag("ask_ai_anomaly_btn"),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.Build, contentDescription = "Ticket", modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Dispatch Field Maintenance Ticket", fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (uiState.assistantLanguage == com.example.network.AssistantLanguage.TAMIL) "AI குரல் ஆலோசனை" else "Ask AI Voice",
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
+
+                        if (primaryAnomaly != AnomalyType.NONE && !primaryAnomaly.isTrueHydrologicEvent) {
+                            Button(
+                                onClick = {
+                                    viewModel.createTicketForStation(station, primaryAnomaly)
+                                },
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .testTag("dispatch_ticket_btn"),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(primaryAnomaly.colorHex)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Build, contentDescription = "Ticket", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Dispatch Ticket", fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
                         }
                     }
                 }

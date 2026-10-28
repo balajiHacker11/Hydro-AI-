@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.GridView
@@ -61,7 +63,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.network.AssistantLanguage
 import com.example.ui.screens.AnomalyInspectorScreen
+import com.example.ui.screens.AssistantScreen
 import com.example.ui.screens.SanitizerQualityScreen
 import com.example.ui.screens.StationsNetworkScreen
 import com.example.ui.screens.TriageTicketsScreen
@@ -81,7 +85,8 @@ class MainActivity : ComponentActivity() {
 }
 
 data class TelemetryNavTab(
-    val title: String,
+    val titleEn: String,
+    val titleTa: String,
     val icon: ImageVector,
     val testTag: String
 )
@@ -99,11 +104,14 @@ fun HydroAiApp(viewModel: TelemetryViewModel = viewModel()) {
         }
     }
 
+    val isTamil = uiState.assistantLanguage == AssistantLanguage.TAMIL
+
     val tabs = listOf(
-        TelemetryNavTab("Stations", Icons.Default.GridView, "nav_stations"),
-        TelemetryNavTab("Anomaly AI", Icons.Default.Timeline, "nav_inspector"),
-        TelemetryNavTab("Sanitizer", Icons.Default.CleaningServices, "nav_sanitizer"),
-        TelemetryNavTab("Triage", Icons.Default.Assignment, "nav_triage")
+        TelemetryNavTab("Stations", "நிலையங்கள்", Icons.Default.GridView, "nav_stations"),
+        TelemetryNavTab("Anomaly AI", "பிழை பகுப்பாய்வு", Icons.Default.Timeline, "nav_inspector"),
+        TelemetryNavTab("Sanitizer", "சுத்திகரிப்பு", Icons.Default.CleaningServices, "nav_sanitizer"),
+        TelemetryNavTab("Triage", "பணி ஆணைகள்", Icons.Default.Assignment, "nav_triage"),
+        TelemetryNavTab("AI Voice", "குரல் AI", Icons.Default.AutoAwesome, "nav_ai_voice")
     )
 
     Scaffold(
@@ -122,7 +130,7 @@ fun HydroAiApp(viewModel: TelemetryViewModel = viewModel()) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.surface,
-                            border = androidx.compose.foundation.BorderStroke(
+                            border = BorderStroke(
                                 1.dp,
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                             ),
@@ -157,7 +165,7 @@ fun HydroAiApp(viewModel: TelemetryViewModel = viewModel()) {
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "DWLR QC",
+                                        text = if (isTamil) "DWLR QC" else "DWLR QC",
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 9.sp),
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -165,7 +173,7 @@ fun HydroAiApp(viewModel: TelemetryViewModel = viewModel()) {
                                 }
                             }
                             Text(
-                                text = "Automated Anomaly Detection",
+                                text = if (isTamil) "குரல் வழி AI உதவியாளர் & தரக் கட்டுப்பாடு" else "Voice AI Assistant & Telemetry QC",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -173,6 +181,34 @@ fun HydroAiApp(viewModel: TelemetryViewModel = viewModel()) {
                     }
                 },
                 actions = {
+                    // Quick Language Switch Pill in Top Bar
+                    Surface(
+                        onClick = {
+                            val nextLang = if (isTamil) AssistantLanguage.ENGLISH else AssistantLanguage.TAMIL
+                            viewModel.setAssistantLanguage(nextLang)
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .testTag("app_bar_lang_toggle")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isTamil) "🇮🇳 தமிழ்" else "🇬🇧 English",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                ),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
                     // Live Streaming Connection Toggle
                     IconButton(
                         onClick = { viewModel.toggleLiveStreaming() },
@@ -195,7 +231,7 @@ fun HydroAiApp(viewModel: TelemetryViewModel = viewModel()) {
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                border = androidx.compose.foundation.BorderStroke(
+                border = BorderStroke(
                     0.8.dp,
                     MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                 )
@@ -207,22 +243,24 @@ fun HydroAiApp(viewModel: TelemetryViewModel = viewModel()) {
                 ) {
                     tabs.forEachIndexed { index, tab ->
                         val isSelected = uiState.currentTab == index
+                        val labelText = if (isTamil) tab.titleTa else tab.titleEn
                         NavigationBarItem(
                             selected = isSelected,
                             onClick = { viewModel.setTab(index) },
                             icon = {
                                 Icon(
                                     imageVector = tab.icon,
-                                    contentDescription = tab.title
+                                    contentDescription = labelText
                                 )
                             },
                             label = {
                                 Text(
-                                    text = tab.title,
+                                    text = labelText,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 11.sp
-                                    )
+                                        fontSize = 10.5.sp
+                                    ),
+                                    maxLines = 1
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -254,6 +292,7 @@ fun HydroAiApp(viewModel: TelemetryViewModel = viewModel()) {
                     1 -> AnomalyInspectorScreen(viewModel = viewModel, uiState = uiState)
                     2 -> SanitizerQualityScreen(viewModel = viewModel, uiState = uiState)
                     3 -> TriageTicketsScreen(viewModel = viewModel, uiState = uiState)
+                    4 -> AssistantScreen(viewModel = viewModel, uiState = uiState)
                 }
             }
         }
